@@ -1,0 +1,330 @@
+---
+title: "EM algorithm for mixtures"
+author: "Sebastian Calcetero"
+date: "31/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+1. Mixtures models
+
+We say that a random variable $X$ follows a *mixture distribution* if its density function is of the form
+
+$$f(x ; \Psi ) = \sum_{j=1}^m a_jf_j(x; \theta_j) $$
+where $f_j(x; \theta_j)$ are densities, called the *components*,  and $a_j$ are non-negative coefficients that add up to 1, called the *weights*. Here $\Phi=(a_1, \ldots, a_m, \theta_1, \ldots, \theta_m) $ is the vector of all parameters.
+
+A mixture model has the following important interpretation: Suppose the whole population is divided in $m$ classes, where the  j-th class represents the $100*a_j \%$ of the population and the distribution of the random variable $X$ in such a class is given by  $f_j(x; \theta_j)$. Then the density of the random variable $X$ for an individual selected at random from the population is given by the mixture distribution above.
+
+
+2. EM algorithm for fixture models
+
+Suppose we observe the values of the random variable $X_i$ for a total of $n$ individuals. In addition, consider the unobserved random variables $Y_i$ which denote the class from which the i-th individual was selected, so that $P(Y_i=j)=a_j$.
+
+The *complete* data log-likelihood is then,
+
+$$ l(\Phi ; \mathbf{X,Y}) = \sum_{i=1}^n \sum_{j=1}^m  \mathbf{1}_{ \{ Y_i=j \} }\log \left( a_j f_j(x_i; \theta_j) \right) $$
+In the EM algorithm the vector $\Phi$ is estimated iteratively, for which we use the notation $\Phi^{(k)}=(a_1^{(k)}, \ldots, a_m^{(k)}, \theta_1^{(k)}, \ldots, \theta_m^{(k)}) $. Hence, given a starting value $\Phi^{(0)}$, the algorithm iterates over these steps:
+
+  + **E-Step:**  Take the conditional expectation of the complete lok-likelihood with respect to the observed data $\mathbf{X}$ and the previous value of the parameters $\Phi^{(k-1)}$
+  
+  $$ Q(\Phi ; \mathbf{X},\Phi^{(k-1)}) = E(l(\Phi ; \mathbf{X,Y}) \vert \mathbf{X},\Phi^{(k-1)} )=\sum_{i=1}^n \sum_{j=1}^m  g_{ij}^{(k-1)}\log \left( a_j f_j(x_i; \theta_j) \right) $$
+  
+  where $g_{ij}^{(k-1)} = E(\mathbf{1}_{ \{ Y_i=j \} } \vert \mathbf{X},\Phi^{(k-1)} ) =  P( Y_i=j  \vert \mathbf{X},\Phi^{(k-1)} ) = a_j^{(k-1)} f_j(x_i; \theta_j^{(k-1)})/f(x_i; \Phi^{(k-1)})$ are the posterior probabilities of belonging to a class.
+
+
+  + **M-Step:** We maximize the previews expression to obtain the  values of the parameters for the next iteration,  $\Phi^{(k)}$. That is, $\Phi^{(k)} = argmax_\Phi Q(\Phi ; \mathbf{X},\Phi^{(k-1)})$. Taking derivatives this yields to the equations,
+  
+  $$ a_j^{(k)} =\frac{1}{n} \sum_{i=1}^n  g_{ij}^{(k-1)}$$
+  
+  $$ \sum_{i=1}^n  g_{ij}^{(k-1)} \frac{\partial}{\partial \theta_j} \log \left(f_j(x_i; \theta_j) \right) =0, ~~ j=1, \ldots, m$$
+The last expression depends in the components selected, and might be solved analytically or numerically.
+
+
+These steps are repeated until convergence to a solution.
+
+3. Example EM algorithm for mixture of exponential distributions
+
+For the exponential distribution we have $f_j(x;\theta_j)=\frac{1}{\theta_j}e^{-x/\theta_j}$, and so 
+
+$$f(x ; \Psi ) = \sum_{j=1}^m a_j\frac{1}{\theta_j}e^{-x/\theta_j}$$
+
+Let's generate some data first
+
+```{r }
+#Let's get some data ...
+n <- 600 #Sample size
+X <- data.frame(x= exp(c(rnorm( n = n/3, mean = 0.1,  sd = 0.1),
+                     rnorm( n = n/3, mean = 0.5,  sd = 0.2  ),
+                     rnorm( n = n/3, mean = 1.5,  sd = 0.3  ))))
+
+
+
+
+#X <- data.frame(x= c(rlnorm( n = n/3, meanlog = 1, sdlog = 1 ),
+                    # rlnorm( n = n/3, meanlog = 2, sdlog = 1 ),
+                    # rlnorm( n = n/3, meanlog = 3, sdlog = 1 ))
+                #) #Simulate from a log-normal
+hist(X$x)
+plot(density(X$x))
+
+```
+
+
+One way to get some starting values for the algorithm is by first generating an artificial clustering of the data in $m$ groups, and then estimate the parameters for each group using traditional MLE techniques.
+
+```{r }
+m <- 4
+cluster <- kmeans(x = X,centers = m) #Clustering using k means
+initial <-X %>% cbind(group = cluster$cluster) %>% 
+              group_by(group) %>% 
+              summarise( theta = mean(x), #MLE of theta is the sample mean
+                             a =  n() / dim(X)[1]) #Estimate a as the sample proportion
+initial
+
+Phi_0 <- list(Theta = initial$theta, a = initial$a )
+```
+
+Therefore the E-step takes the form
+
+ $$ Q(\Phi ; \mathbf{X},\Phi^{(k-1)}) = \sum_{i=1}^n \sum_{j=1}^m  g_{ij}^{(k-1)}\log \left( a_j \frac{1}{\theta_j}e^{-x/\theta_j} \right) $$
+where the posterior probabilities are given by
+
+$$g_{ij}^{(k-1)} =  \frac{a_j^{(k-1)} \frac{1}{\theta_j^{(k-1)}}e^{-x/\theta_j^{(k-1)}}}{\sum_{h=1}^m a_h^{(k-1)}\frac{1}{\theta_h^{(k-1)}}e^{-x/\theta_h^{(k-1)}}}$$
+
+
+
+```{r }
+#Compute the posterior probabilities
+
+f_joint = function(x,y, Phi){ Phi$a[y]*dexp(x = x,rate = 1/Phi$Theta[y]) } #Joint distribution
+
+g_num <- outer(X = X$x, Y = 1:m,  Phi = Phi_0, FUN = f_joint ) #Compute the numerator for all data
+g_denom <- apply(X = g_num, MARGIN = 1,FUN = sum ) #Compute the values in the denominator
+
+g_0 <-g_num/g_denom #Ratio
+
+head(g_0)
+```
+
+
+For this particular case, as covered in the lecture, the set of equations in the M-step have a  explicit solution:
+
+$$ a_j^{(k)} =\frac{1}{n} \sum_{i=1}^n  g_{ij}^{(k-1)}$$
+
+$$ \theta_j^{(k)} = \frac {\sum_{i=1}^n  g_{ij}^{(k-1)}X_i}{\sum_{i=1}^n  g_{ij}^{(k-1)}}= \frac {\sum_{i=1}^n  g_{ij}^{(k-1)}X_i}{na_j^{(k)}}$$
+
+```{r }
+#Compute new values in the M-step
+
+a_1 = apply(X = g_0,MARGIN = 2,FUN = sum)/n
+theta_1 = apply(X = X$x*g_0,MARGIN = 2,FUN = sum)/(n*a_1)
+
+Phi_k=list(Theta = theta_1, a = a_1 )
+
+Phi_k
+
+```
+
+To get the estimates we itereate until convergence of the estimation:
+
+```{r }
+
+convergence = FALSE
+k=1
+
+while(!convergence){
+  
+#Posterior probabilities
+g_num <- outer(X = X$x, Y = 1:m,  Phi = Phi_k, FUN = f_joint ) 
+g_denom <- apply(X = g_num, MARGIN = 1,FUN = sum )
+g_k <-g_num/g_denom
+
+#Compute new values in the M-step
+a_k = apply(X = g_k,MARGIN = 2,FUN = sum)/n
+theta_k = apply(X = X$x*g_k,MARGIN = 2,FUN = sum)/(n*a_k)
+
+#Check convergence
+convergence <- (sum((Phi_k$Theta-theta_k)^2)+sum((Phi_k$a-a_k)^2)<0.00001)
+  
+#Print values of iterations
+print(paste0("------------------------------------------------- "))
+print(paste0("Iteration ", k))
+print(paste0("Parameter Theta"))
+print(theta_k)
+print(paste0("Weights a"))
+print(a_k)
+
+#Update new value of parameters
+Phi_k=list(Theta = theta_k, a = a_k )
+k=k+1
+
+
+}
+
+
+
+```
+
+Now let's look at the fitted mixture
+
+```{r }
+#Density of the mixture
+fitted_density = function(x){ apply(X = outer(X = x, Y = 1:m,FUN = f_joint, Phi=Phi_k),MARGIN = 1,FUN = sum)}
+
+#SOome values for a grid
+xval=seq(0,max(X$x),0.1)
+fval=fitted_density(xval)
+
+#Plot the fitted densities
+hist(X$x,freq = F,breaks = 20)
+lines(xval,fval,type="l",col="blue")
+lines(density(X$x,from = 0), col="red")
+legend('topright', col=c("blue", 'red'), lwd=2, legend=c("fitted", "kernel"))
+```
+4. Example using Mixtools
+
+We can do this calculation using the  `mixtools` package
+
+```{r }
+#install.packages("mixtools")
+library(mixtools)
+```
+These R package is able to fit several types of mixture models, not only with several distributions but also including more flexible models sucha as regression type models to account for covariates as well. We'll just do simple fittings here. The name of the function changes depending on what componetn distribution you want to fit.
+
+For the mixture of exponential distributions we can use the function `expRMM_EM` 
+
+```{r }
+#Fit the model
+fit_exp <- expRMM_EM(x = X$x,
+                     k = m,
+                     lambda = Phi_0$a,
+                     rate = Phi_0$Theta^(-1) )
+
+#See estimates
+fit_exp$lambda
+fit_exp$rate^(-1)
+```
+
+We can see similar results to what we did by hand in terms of the parameters, and so the same for the fitted distribution:
+
+```{r }
+Phi_exp <-list(Theta = fit_exp$rate^(-1), a = fit_exp$lambda)
+
+#Density of the mixture
+fitted_density_exp = function(x){ apply(X = outer(X = x, Y = 1:m,FUN = f_joint, Phi=Phi_exp ),MARGIN = 1,FUN = sum)}
+
+#SOome values for a grid
+xval=seq(0,max(X$x),0.1)
+fval=fitted_density_exp(xval)
+
+#Plot the fitted densities
+hist(X$x,freq = F,breaks = 20)
+lines(xval,fval,type="l",col="blue")
+lines(density(X$x,from = 0), col="red")
+legend('topright', col=c("blue", 'red'), lwd=2, legend=c("fitted", "kernel"))
+```
+
+Let's try to fit a mixture that is more flexible. Let's say for instance a mixture of Gammas. In this case the model  we have $f_j(x;\theta_j)=\frac{1}{\theta_j}e^{-x/\theta_j}$, and so 
+
+$$f(x ; \Psi ) = \sum_{j=1}^m a_j\frac{1}{\theta_j}e^{-x/\theta_j}$$
+To estimate this model using  `mixtools` we can use the function  `gammamixEM`. Its usage is analogous to the previous one
+
+
+```{r }
+#Fit the model
+fit_gamma<- gammamixEM(x = X$x, #Data 
+                     k = m )#, #Number of components
+                     #fix.alpha = T)#, #Same shape parameter (optional)
+                    # lambda = Phi_0$a, #Use the clustering proportions as starting values for the weights
+                   # mom.start = T ) #Find starting values for shape and rate parameters  using method of moments.
+
+#See estimates
+fit_gamma$lambda
+fit_gamma$gamma.pars
+```
+Let's see how it fits the data:
+
+```{r }
+Phi_gamma <-list(alpha = fit_gamma$gamma.pars[1,], beta = fit_gamma$gamma.pars[2,], a = fit_gamma$lambda)
+
+f_joint_gamma <- function(x,y,Phi){ Phi$a[y]*dgamma(x = x, scale = Phi_gamma$beta[y],shape = Phi_gamma$alpha[y] ) }
+
+#Density of the mixture
+fitted_density_gamma = function(x){ apply(X = outer(X = x, Y = 1:m,FUN = f_joint_gamma, Phi=Phi_gamma ),MARGIN = 1,FUN = sum)}
+
+#SOome values for a grid
+xval=seq(0,max(X$x),0.1)
+fval=fitted_density_gamma(xval)
+
+#Plot the fitted densities
+hist(X$x,freq = F,breaks = 20)
+lines(xval,fval,type="l",col="blue")
+lines(density(X$x,from = 0), col="red")
+legend('topright', col=c("blue", 'red'), lwd=2, legend=c("fitted", "kernel"))
+```
+
+But how do we select the number of components?
+There are several ways of doing this, the most common approach is using an information criterion, for instance the AIC. In this setting, we select the number of components that gives the minimum AIC:
+
+```{r }
+
+AIC=numeric(0)
+BIC=numeric(0)
+
+for(i in 1:10){
+  
+  #Fit mixtire model and obtain information criterios
+  fit_gamma_temp<- gammamixEM(x = X$x, k = i )
+  AIC_temp <- 2*(3*i)-2*(fit_gamma_temp$loglik)
+  BIC_temp <- log(n)*(3*i)-2*(fit_gamma_temp$loglik)
+  
+  #Save values
+  AIC <-c(AIC,AIC_temp)
+  BIC <-c(BIC,BIC_temp)
+  
+}
+
+#Plot the fitted densities
+plot(1:length(BIC),BIC,type = "b", col="red",ylim = c(min(AIC),max(BIC)))
+lines(1:length(AIC),AIC,type = "b", col="blue")
+legend('top', col=c("blue", 'red'), lwd=2, legend=c("AIC", "BIC"))
+```
+Therefore the AIC indicates that we should use `r which.min(AIC)` components, and the BIC `r which.min(BIC)`.
+With that said the model to use is:
+
+
+```{r }
+#Fit the model
+fit_gamma<- gammamixEM(x = X$x, #Data 
+                     k = which.min(AIC) )#, #Number of components
+                     #fix.alpha = T)#, #Same shape parameter (optional)
+                    # lambda = Phi_0$a, #Use the clustering proportions as starting values for the weights
+                   # mom.start = T ) #Find starting values for shape and rate parameters  using method of moments.
+
+#See estimates
+fit_gamma$lambda
+fit_gamma$gamma.pars
+
+Phi_gamma <-list(alpha = fit_gamma$gamma.pars[1,], beta = fit_gamma$gamma.pars[2,], a = fit_gamma$lambda)
+
+
+#Density of the mixture
+fitted_density_gamma = function(x){ apply(X = outer(X = x, Y = 1:which.min(AIC),FUN = f_joint_gamma, Phi=Phi_gamma ),MARGIN = 1,FUN = sum)}
+
+#Some values for a grid
+xval=seq(0,max(X$x),0.1)
+fval=fitted_density_gamma(xval)
+
+#Plot the fitted densities
+hist(X$x,freq = F,breaks = 20)
+lines(xval,fval,type="l",col="blue")
+lines(density(X$x,from = 0), col="red")
+legend('topright', col=c("blue", 'red'), lwd=2, legend=c("fitted", "kernel"))
+
+
+
+```
