@@ -3,7 +3,6 @@ title: "EM algortihm for mixtures models in R"
 author: "Sebastian Calcetero"
 date: "April 9 2021"
 header-includes:
-- \usepackage{asmath}
 output: html_document
 ---
 
