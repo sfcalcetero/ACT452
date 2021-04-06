@@ -1,7 +1,9 @@
 ---
-title: "EM algorithm for mixtures"
+title: "EM algortihm for mixtures models in R"
 author: "Sebastian Calcetero"
-date: "31/03/2021"
+date: "April 9 2021"
+header-includes:
+- \usepackage{asmath}
 output: html_document
 ---
 
@@ -10,24 +12,24 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
-1. Mixtures models
+# 1. Mixtures models
 
 We say that a random variable $X$ follows a *mixture distribution* if its density function is of the form
 
-$$f(x ; \Psi ) = \sum_{j=1}^m a_jf_j(x; \theta_j) $$
-where $f_j(x; \theta_j)$ are densities, called the *components*,  and $a_j$ are non-negative coefficients that add up to 1, called the *weights*. Here $\Phi=(a_1, \ldots, a_m, \theta_1, \ldots, \theta_m) $ is the vector of all parameters.
+$$f(x ; \Phi ) = \sum_{j=1}^m a_jf_j(x; \theta_j) $$
+where $f_j(x; \theta_j)$ are densities, called the *components*,  and $a_j$ are non-negative coefficients that add up to 1, called the *weights*. Here $\Phi$ is the vector of all parameters.
 
 A mixture model has the following important interpretation: Suppose the whole population is divided in $m$ classes, where the  j-th class represents the $100*a_j \%$ of the population and the distribution of the random variable $X$ in such a class is given by  $f_j(x; \theta_j)$. Then the density of the random variable $X$ for an individual selected at random from the population is given by the mixture distribution above.
 
 
-2. EM algorithm for fixture models
+# 2. EM algorithm for fixture models
 
 Suppose we observe the values of the random variable $X_i$ for a total of $n$ individuals. In addition, consider the unobserved random variables $Y_i$ which denote the class from which the i-th individual was selected, so that $P(Y_i=j)=a_j$.
 
 The *complete* data log-likelihood is then,
 
 $$ l(\Phi ; \mathbf{X,Y}) = \sum_{i=1}^n \sum_{j=1}^m  \mathbf{1}_{ \{ Y_i=j \} }\log \left( a_j f_j(x_i; \theta_j) \right) $$
-In the EM algorithm the vector $\Phi$ is estimated iteratively, for which we use the notation $\Phi^{(k)}=(a_1^{(k)}, \ldots, a_m^{(k)}, \theta_1^{(k)}, \ldots, \theta_m^{(k)}) $. Hence, given a starting value $\Phi^{(0)}$, the algorithm iterates over these steps:
+In the EM algorithm the vector $\Phi$ is estimated iteratively, for which we use the notation $\Phi^{(k)}$. Hence, given a starting value $\Phi^{(0)}$, the algorithm iterates over these steps:
 
   + **E-Step:**  Take the conditional expectation of the complete lok-likelihood with respect to the observed data $\mathbf{X}$ and the previous value of the parameters $\Phi^{(k-1)}$
   
@@ -46,47 +48,63 @@ The last expression depends in the components selected, and might be solved anal
 
 These steps are repeated until convergence to a solution.
 
-3. Example EM algorithm for mixture of exponential distributions
+# 3. Example EM algorithm for mixture of exponential distributions
+
+### Mixture of exponential distributions
 
 For the exponential distribution we have $f_j(x;\theta_j)=\frac{1}{\theta_j}e^{-x/\theta_j}$, and so 
 
-$$f(x ; \Psi ) = \sum_{j=1}^m a_j\frac{1}{\theta_j}e^{-x/\theta_j}$$
+$$f(x ; \Phi ) = \sum_{j=1}^m a_j\frac{1}{\theta_j}e^{-x/\theta_j}$$
 
 Let's generate some data first
 
 ```{r }
 #Let's get some data ...
 n <- 600 #Sample size
-X <- data.frame(x= exp(c(rnorm( n = n/3, mean = 0.1,  sd = 0.1),
+set.seed(201111754)
+X <- data.frame(x= exp(c(rnorm( n = n/3, mean = 0.1,  sd = 0.2),
                      rnorm( n = n/3, mean = 0.5,  sd = 0.2  ),
                      rnorm( n = n/3, mean = 1.5,  sd = 0.3  ))))
 
-
-
-
-#X <- data.frame(x= c(rlnorm( n = n/3, meanlog = 1, sdlog = 1 ),
-                    # rlnorm( n = n/3, meanlog = 2, sdlog = 1 ),
-                    # rlnorm( n = n/3, meanlog = 3, sdlog = 1 ))
-                #) #Simulate from a log-normal
-hist(X$x)
-plot(density(X$x))
+hist(x = X$x, 
+     main= "Histograma of data",
+     xlab = "Data x",
+     ylab = "Frequency",
+     breaks = 20,
+     freq = F,
+     ylim = c(0,0.8),
+     xlim = c(0,10))
+lines(density(X$x,from = 0), col="blue")
 
 ```
 
+### Starting values for EM
 
 One way to get some starting values for the algorithm is by first generating an artificial clustering of the data in $m$ groups, and then estimate the parameters for each group using traditional MLE techniques.
 
 ```{r }
-m <- 4
-cluster <- kmeans(x = X,centers = m) #Clustering using k means
-initial <-X %>% cbind(group = cluster$cluster) %>% 
-              group_by(group) %>% 
+#Find initial values for the EM
+
+m <- 4  #NUmber of components for the mixture
+
+cluster <- kmeans(x = X,
+                  centers = m) #Clustering using k means
+
+initial <- X %>% cbind(group = cluster$cluster) %>% 
+              group_by(group) %>%  #Summarize by group
               summarise( theta = mean(x), #MLE of theta is the sample mean
                              a =  n() / dim(X)[1]) #Estimate a as the sample proportion
-initial
 
-Phi_0 <- list(Theta = initial$theta, a = initial$a )
+#Store values
+Phi_0 <- list(Theta = initial$theta, 
+              a = initial$a ) 
+
+initial #Display Values
+
+
 ```
+
+### E-Step
 
 Therefore the E-step takes the form
 
@@ -98,18 +116,27 @@ $$g_{ij}^{(k-1)} =  \frac{a_j^{(k-1)} \frac{1}{\theta_j^{(k-1)}}e^{-x/\theta_j^{
 
 
 ```{r }
-#Compute the posterior probabilities
+# E - Step: Compute the posterior probabilities
 
 f_joint = function(x,y, Phi){ Phi$a[y]*dexp(x = x,rate = 1/Phi$Theta[y]) } #Joint distribution
 
-g_num <- outer(X = X$x, Y = 1:m,  Phi = Phi_0, FUN = f_joint ) #Compute the numerator for all data
-g_denom <- apply(X = g_num, MARGIN = 1,FUN = sum ) #Compute the values in the denominator
+g_num <- outer(X = X$x, 
+               Y = 1:m,  
+               Phi = Phi_0, 
+               FUN = f_joint ) #Compute the numerator of g for all data
 
-g_0 <-g_num/g_denom #Ratio
+g_denom <- apply(X = g_num,
+                 MARGIN = 1,
+                 FUN = sum ) #Compute the denominator of g for all data
 
-head(g_0)
+g_0 <-g_num/g_denom #g is the ratio
+
+colnames(g_0) = outer("g^(0)_,",1:m,FUN = paste0) #Names
+rownames(g_0) = outer("X_",1:n,FUN = paste0)
+
+head(g_0) #Display
 ```
-
+### M-Step
 
 For this particular case, as covered in the lecture, the set of equations in the M-step have a  explicit solution:
 
@@ -118,40 +145,71 @@ $$ a_j^{(k)} =\frac{1}{n} \sum_{i=1}^n  g_{ij}^{(k-1)}$$
 $$ \theta_j^{(k)} = \frac {\sum_{i=1}^n  g_{ij}^{(k-1)}X_i}{\sum_{i=1}^n  g_{ij}^{(k-1)}}= \frac {\sum_{i=1}^n  g_{ij}^{(k-1)}X_i}{na_j^{(k)}}$$
 
 ```{r }
-#Compute new values in the M-step
+#M-step: Compute updated values for the means and the weights with the formulas
 
-a_1 = apply(X = g_0,MARGIN = 2,FUN = sum)/n
-theta_1 = apply(X = X$x*g_0,MARGIN = 2,FUN = sum)/(n*a_1)
+# New weights
+a_1 = apply(X = g_0,
+            MARGIN = 2, #By columns
+            FUN = sum)/n
 
-Phi_k=list(Theta = theta_1, a = a_1 )
+names(a_1) = outer("a_",1:m,FUN = paste0) #Names
 
-Phi_k
+#Weighted average
+theta_1 = apply(X = X$x*g_0,
+                MARGIN = 2, #By columns
+                FUN = sum)/(n*a_1)
+
+names(theta_1 ) = outer("theta_",1:m,FUN = paste0) #Names
+
+Phi_k=list(Theta = theta_1, a = a_1 ) #Store values in alist
+
+Phi_k #Display results
 
 ```
+### Iterations of the EM algorithm
 
-To get the estimates we itereate until convergence of the estimation:
+To get the estimates we iterate until convergence of the estimation:
 
 ```{r }
 
-convergence = FALSE
-k=1
+convergence = FALSE #Boolean that denotes the convergence to a solution
+k=1 #Stores the value of the current iteration
 
 while(!convergence){
   
-#Posterior probabilities
-g_num <- outer(X = X$x, Y = 1:m,  Phi = Phi_k, FUN = f_joint ) 
-g_denom <- apply(X = g_num, MARGIN = 1,FUN = sum )
+#E-Step: Posterior probabilities (same code form above)
+g_num <- outer(X = X$x,
+               Y = 1:m,
+               Phi = Phi_k, 
+               FUN = f_joint ) 
+
+g_denom <- apply(X = g_num,
+                 MARGIN = 1,
+                 FUN = sum )
+
 g_k <-g_num/g_denom
 
-#Compute new values in the M-step
-a_k = apply(X = g_k,MARGIN = 2,FUN = sum)/n
-theta_k = apply(X = X$x*g_k,MARGIN = 2,FUN = sum)/(n*a_k)
+colnames(g_k) = outer("g^(k)_",1:m,FUN = paste0) #Names
+rownames(g_k) = outer("X_",1:n,FUN = paste0)
+
+#M-Step: Compute updated values values in the M-step
+a_k = apply(X = g_k,
+            MARGIN = 2,
+            FUN = sum)/n
+
+theta_k = apply(X = X$x*g_k,
+                MARGIN = 2,
+                FUN = sum)/(n*a_k)
+
+names(a_k) = outer("a_",1:m,FUN = paste0) #Names
+names(theta_k ) = outer("theta_",1:m,FUN = paste0) #Names
 
 #Check convergence
-convergence <- (sum((Phi_k$Theta-theta_k)^2)+sum((Phi_k$a-a_k)^2)<0.00001)
+convergence <- (sum((Phi_k$Theta-theta_k)^2)+ #L2 norm between iterations
+              sum((Phi_k$a-a_k)^2)<0.00001)
   
 #Print values of iterations
-print(paste0("------------------------------------------------- "))
+print(paste0("-------------------------------------------------------------- "))
 print(paste0("Iteration ", k))
 print(paste0("Parameter Theta"))
 print(theta_k)
@@ -162,30 +220,49 @@ print(a_k)
 Phi_k=list(Theta = theta_k, a = a_k )
 k=k+1
 
-
 }
 
-
-
 ```
+
+### Fitted density
 
 Now let's look at the fitted mixture
 
 ```{r }
 #Density of the mixture
-fitted_density = function(x){ apply(X = outer(X = x, Y = 1:m,FUN = f_joint, Phi=Phi_k),MARGIN = 1,FUN = sum)}
+fitted_density = function(x){ apply(X = outer(X = x,
+                                              Y = 1:m,
+                                              FUN = f_joint,
+                                              Phi=Phi_k),
+                                    MARGIN = 1,
+                                    FUN = sum)}
 
-#SOome values for a grid
-xval=seq(0,max(X$x),0.1)
-fval=fitted_density(xval)
+#Some values for a grid
+xval = seq(0,max(X$x),0.01) #Grid of X values 
+fval = fitted_density(xval) #Density evaluated
 
 #Plot the fitted densities
-hist(X$x,freq = F,breaks = 20)
-lines(xval,fval,type="l",col="blue")
-lines(density(X$x,from = 0), col="red")
-legend('topright', col=c("blue", 'red'), lwd=2, legend=c("fitted", "kernel"))
+hist(x = X$x,   #Plot data
+     main= "Comparison of densities",
+     xlab = "Data x",
+     ylab = "Frequency",
+     breaks = 20,
+     freq = F,
+     ylim = c(0,0.8),
+     xlim = c(0,10))
+lines(xval,  #Plot fitted density
+      fval,
+      type="l",
+      col="blue")
+lines(density(X$x,from = 0),  #Plot fitted kernel
+      col="red")
+legend('topright', 
+       col=c("blue", 'red'), 
+       lwd=2, 
+       legend=c("Mixture", "Kernel"))
 ```
-4. Example using Mixtools
+
+#4. Example using Mixtools
 
 We can do this calculation using the  `mixtools` package
 
@@ -193,138 +270,232 @@ We can do this calculation using the  `mixtools` package
 #install.packages("mixtools")
 library(mixtools)
 ```
-These R package is able to fit several types of mixture models, not only with several distributions but also including more flexible models sucha as regression type models to account for covariates as well. We'll just do simple fittings here. The name of the function changes depending on what componetn distribution you want to fit.
+These R package is able to fit several types of mixture models, not only with several distributions but also including more flexible models such as regression type models to account for covariates as well. We'll just do simple fittings here. The name of the function changes depending on what component distributions you want to fit.
+
+### Mixture of Exponentials
 
 For the mixture of exponential distributions we can use the function `expRMM_EM` 
 
 ```{r }
 #Fit the model
-fit_exp <- expRMM_EM(x = X$x,
-                     k = m,
-                     lambda = Phi_0$a,
-                     rate = Phi_0$Theta^(-1) )
+fit_exp <- expRMM_EM(x = X$x, #Data
+                     k = m, #NUmber of components
+                     lambda = Phi_0$a, #Starting values for lambda (optional)
+                     rate = Phi_0$Theta^(-1) ) #Starting values for the rates (optional)
+
+#Obtain estimations
+lambda <- fit_exp$lambda
+means <- fit_exp$rate^(-1)
+
+names(lambda) = outer("a_",1:m,FUN = paste0) #Names
+names(means) = outer("theta_",1:m,FUN = paste0) #Names
+
+Phi_exp <-list(Theta = means, 
+                   a = lambda)
 
 #See estimates
-fit_exp$lambda
-fit_exp$rate^(-1)
+Phi_exp
 ```
 
 We can see similar results to what we did by hand in terms of the parameters, and so the same for the fitted distribution:
 
 ```{r }
-Phi_exp <-list(Theta = fit_exp$rate^(-1), a = fit_exp$lambda)
 
 #Density of the mixture
-fitted_density_exp = function(x){ apply(X = outer(X = x, Y = 1:m,FUN = f_joint, Phi=Phi_exp ),MARGIN = 1,FUN = sum)}
+fitted_density_exp = function(x){ apply(X = outer(X = x, 
+                                                  Y = 1:m,
+                                                  FUN = f_joint, 
+                                                  Phi=Phi_exp ),
+                                        MARGIN = 1,
+                                        FUN = sum)}
 
-#SOome values for a grid
-xval=seq(0,max(X$x),0.1)
-fval=fitted_density_exp(xval)
+#Evaluate fitted density
+fval_exp=fitted_density_exp(xval) 
 
 #Plot the fitted densities
-hist(X$x,freq = F,breaks = 20)
-lines(xval,fval,type="l",col="blue")
-lines(density(X$x,from = 0), col="red")
-legend('topright', col=c("blue", 'red'), lwd=2, legend=c("fitted", "kernel"))
+hist(x = X$x,   #Plot data
+     main= "Comparison of densities",
+     xlab = "Data x",
+     ylab = "Frequency",
+     breaks = 20,
+     freq = F,
+     ylim = c(0,0.8),
+     xlim = c(0,10))
+lines(xval,  #Plot fitted density
+      fval_exp,
+      type="l",
+      col="blue")
+lines(density(X$x,from = 0),  #Plot fitted kernel
+      col="red")
+legend('topright', 
+       col=c("blue", 'red'), 
+       lwd=2, 
+       legend=c("Mixture", "Kernel"))
+
 ```
 
-Let's try to fit a mixture that is more flexible. Let's say for instance a mixture of Gammas. In this case the model  we have $f_j(x;\theta_j)=\frac{1}{\theta_j}e^{-x/\theta_j}$, and so 
+### Mixture of Gammas
 
-$$f(x ; \Psi ) = \sum_{j=1}^m a_j\frac{1}{\theta_j}e^{-x/\theta_j}$$
+Let's try to fit a mixture that is more flexible. Let's say for instance a mixture of Gammas. In this case the model  we have $f_j(x;\theta_j)=\frac{1}{\Gamma(\alpha_j)\beta_j^\alpha}x^{\alpha-1}e^{-x/\beta_j}$, and so 
+
+$$f(x ; \Phi ) = \sum_{j=1}^m a_j\frac{1}{\Gamma(\alpha_j)\beta_j^\alpha}x^{\alpha-1}e^{-x/\beta_j}$$
 To estimate this model using  `mixtools` we can use the function  `gammamixEM`. Its usage is analogous to the previous one
 
 
 ```{r }
 #Fit the model
 fit_gamma<- gammamixEM(x = X$x, #Data 
-                     k = m )#, #Number of components
-                     #fix.alpha = T)#, #Same shape parameter (optional)
-                    # lambda = Phi_0$a, #Use the clustering proportions as starting values for the weights
-                   # mom.start = T ) #Find starting values for shape and rate parameters  using method of moments.
+                     k = m , #Number of components
+                     fix.alpha = T, #Same shape parameter (optional)
+                     lambda = Phi_0$a, #Use the clustering proportions as starting values for the weights
+                    mom.start = T ) #Find starting values for shape and rate parameters  using method of moments.
+
+#Obtain estimations
+Phi_gamma <-list(alpha = fit_gamma$gamma.pars[1,],
+                  beta = fit_gamma$gamma.pars[2,], 
+                     a = fit_gamma$lambda)
 
 #See estimates
-fit_gamma$lambda
-fit_gamma$gamma.pars
+Phi_gamma
 ```
 Let's see how it fits the data:
 
 ```{r }
-Phi_gamma <-list(alpha = fit_gamma$gamma.pars[1,], beta = fit_gamma$gamma.pars[2,], a = fit_gamma$lambda)
 
-f_joint_gamma <- function(x,y,Phi){ Phi$a[y]*dgamma(x = x, scale = Phi_gamma$beta[y],shape = Phi_gamma$alpha[y] ) }
+#Joint distribution 
+f_joint_gamma <- function(x,y,Phi){ Phi$a[y]*dgamma(x = x, 
+                                                    scale = Phi_gamma$beta[y],
+                                                    shape = Phi_gamma$alpha[y] ) }
 
 #Density of the mixture
-fitted_density_gamma = function(x){ apply(X = outer(X = x, Y = 1:m,FUN = f_joint_gamma, Phi=Phi_gamma ),MARGIN = 1,FUN = sum)}
+fitted_density_gamma = function(x){ apply(X = outer(X = x,
+                                                    Y = 1:m,
+                                                    FUN = f_joint_gamma,
+                                                    Phi=Phi_gamma ),
+                                          MARGIN = 1,
+                                          FUN = sum)}
 
-#SOome values for a grid
-xval=seq(0,max(X$x),0.1)
-fval=fitted_density_gamma(xval)
+#Some values for a grid
+fval_gamma=fitted_density_gamma(xval)
 
 #Plot the fitted densities
-hist(X$x,freq = F,breaks = 20)
-lines(xval,fval,type="l",col="blue")
-lines(density(X$x,from = 0), col="red")
-legend('topright', col=c("blue", 'red'), lwd=2, legend=c("fitted", "kernel"))
+hist(x = X$x,   #Plot data
+     main= "Comparison of densities",
+     xlab = "Data x",
+     ylab = "Frequency",
+     breaks = 20,
+     freq = F,
+     ylim = c(0,0.9),
+     xlim = c(0,10))
+lines(xval,  #Plot fitted mixture of exponetial density
+      fval_exp,
+      type="l",
+      col="blue")
+lines(xval,  #Plot fitted mixture of gamma density
+      fval_gamma,
+      type="l",
+      lwd=2,
+      col="magenta")
+lines(density(X$x,from = 0),  #Plot fitted kernel
+      col="red")
+legend('topright', 
+       col=c("blue","magenta", 'red'), 
+       lwd=2, 
+       legend=c("Mix. Exp", "Mix. Gamma", "Kernel"))
 ```
 
 But how do we select the number of components?
-There are several ways of doing this, the most common approach is using an information criterion, for instance the AIC. In this setting, we select the number of components that gives the minimum AIC:
+
+There are several ways of doing this, the most common approach is using an information criterion, for instance the AIC (i.e $-2ln(L)+2k$) or BIC (i.e $-2\log L+ kln(n)$). In this setting, we fit the model with different valus for the number of componetns, and  select the one that gives the minimum of the information criterion:
 
 ```{r }
 
+#Vector containing the values of information criteria
 AIC=numeric(0)
 BIC=numeric(0)
 
-for(i in 1:10){
+for(i in 1:10){ #Fit for m=1, ..., 10 componets. Here 10 was arbitrary.
   
-  #Fit mixtire model and obtain information criterios
+  #Fit mixture model 
   fit_gamma_temp<- gammamixEM(x = X$x, k = i )
+  
+  #Obtain information criterions
   AIC_temp <- 2*(3*i)-2*(fit_gamma_temp$loglik)
   BIC_temp <- log(n)*(3*i)-2*(fit_gamma_temp$loglik)
   
-  #Save values
+  #Store values in the vector
   AIC <-c(AIC,AIC_temp)
   BIC <-c(BIC,BIC_temp)
   
 }
 
-#Plot the fitted densities
-plot(1:length(BIC),BIC,type = "b", col="red",ylim = c(min(AIC),max(BIC)))
-lines(1:length(AIC),AIC,type = "b", col="blue")
-legend('top', col=c("blue", 'red'), lwd=2, legend=c("AIC", "BIC"))
+#Plot AIC and BIC curves
+plot(1:length(BIC),BIC,
+     xlab = "Number of components",
+     ylab = "Information Criterions",
+     type = "b", 
+     col="red",
+     ylim = c(min(AIC),max(BIC)))
+lines(1:length(AIC),AIC,
+      type = "b",
+      col="blue")
+legend('top', 
+       col=c("blue", 'red'), 
+       lwd=2, 
+       legend=c("AIC", "BIC"))
 ```
-Therefore the AIC indicates that we should use `r which.min(AIC)` components, and the BIC `r which.min(BIC)`.
-With that said the model to use is:
+
+
+Therefore the AIC indicates that we should use `r which.min(AIC)` components, and the BIC `r which.min(BIC)`. With that said the model to use is:
 
 
 ```{r }
-#Fit the model
+#Fit the model with the number of components that minimizes AIC
 fit_gamma<- gammamixEM(x = X$x, #Data 
-                     k = which.min(AIC) )#, #Number of components
-                     #fix.alpha = T)#, #Same shape parameter (optional)
-                    # lambda = Phi_0$a, #Use the clustering proportions as starting values for the weights
-                   # mom.start = T ) #Find starting values for shape and rate parameters  using method of moments.
+                     k = which.min(AIC))
+
+#Obtain estimations
+Phi_gamma <-list(alpha = fit_gamma$gamma.pars[1,],
+                  beta = fit_gamma$gamma.pars[2,], 
+                     a = fit_gamma$lambda)
 
 #See estimates
-fit_gamma$lambda
-fit_gamma$gamma.pars
-
-Phi_gamma <-list(alpha = fit_gamma$gamma.pars[1,], beta = fit_gamma$gamma.pars[2,], a = fit_gamma$lambda)
-
+Phi_gamma
 
 #Density of the mixture
-fitted_density_gamma = function(x){ apply(X = outer(X = x, Y = 1:which.min(AIC),FUN = f_joint_gamma, Phi=Phi_gamma ),MARGIN = 1,FUN = sum)}
+fitted_density_gamma = function(x){ apply(X = outer(X = x,
+                                                    Y = 1:which.min(AIC),
+                                                    FUN = f_joint_gamma,
+                                                    Phi=Phi_gamma ),
+                                          MARGIN = 1,
+                                          FUN = sum)}
 
 #Some values for a grid
-xval=seq(0,max(X$x),0.1)
-fval=fitted_density_gamma(xval)
+fval_gamma=fitted_density_gamma(xval)
+
 
 #Plot the fitted densities
-hist(X$x,freq = F,breaks = 20)
-lines(xval,fval,type="l",col="blue")
-lines(density(X$x,from = 0), col="red")
-legend('topright', col=c("blue", 'red'), lwd=2, legend=c("fitted", "kernel"))
-
-
-
+hist(x = X$x,   #Plot data
+     main= "Comparison of densities",
+     xlab = "Data x",
+     ylab = "Frequency",
+     breaks = 20,
+     freq = F,
+     ylim = c(0,0.9),
+     xlim = c(0,10))
+lines(xval,  #Plot fitted mixture of exponetial density
+      fval_exp,
+      type="l",
+      col="blue")
+lines(xval,  #Plot fitted mixture of gamma density
+      fval_gamma,
+      type="l",
+      lwd=2,
+      col="magenta")
+lines(density(X$x,from = 0),  #Plot fitted kernel
+      col="red")
+legend('topright', 
+       col=c("blue","magenta", 'red'), 
+       lwd=2, 
+       legend=c("Mix. Exp", "Mix. Gamma", "Kernel"))
 ```
