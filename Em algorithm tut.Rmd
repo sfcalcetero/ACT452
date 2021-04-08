@@ -261,7 +261,7 @@ legend('topright',
        legend=c("Mixture", "Kernel"))
 ```
 
-#4. Example using Mixtools
+# 4. Example using Mixtools
 
 We can do this calculation using the  `mixtools` package
 
