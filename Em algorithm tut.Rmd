@@ -1,5 +1,5 @@
 ---
-title: "EM algortihm for mixtures models in R"
+title: "EM algortihm for mixture models in R"
 author: "Sebastian Calcetero"
 date: "April 9 2021"
 header-includes:
@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
-# 1. Mixtures models
+# 1. Mixture models
 
 We say that a random variable $X$ follows a *mixture distribution* if its density function is of the form
 
@@ -21,7 +21,7 @@ where $f_j(x; \theta_j)$ are densities, called the *components*,  and $a_j$ are 
 A mixture model has the following important interpretation: Suppose the whole population is divided in $m$ classes, where the  j-th class represents the $100*a_j \%$ of the population and the distribution of the random variable $X$ in such a class is given by  $f_j(x; \theta_j)$. Then the density of the random variable $X$ for an individual selected at random from the population is given by the mixture distribution above.
 
 
-# 2. EM algorithm for fixture models
+# 2. EM algorithm for Mixture models
 
 Suppose we observe the values of the random variable $X_i$ for a total of $n$ individuals. In addition, consider the unobserved random variables $Y_i$ which denote the class from which the i-th individual was selected, so that $P(Y_i=j)=a_j$.
 
