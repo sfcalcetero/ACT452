@@ -419,8 +419,8 @@ for(i in 1:10){ #Fit for m=1, ..., 10 componets. Here 10 was arbitrary.
   fit_gamma_temp<- gammamixEM(x = X$x, k = i )
   
   #Obtain information criterions
-  AIC_temp <- 2*(3*i)-2*(fit_gamma_temp$loglik)
-  BIC_temp <- log(n)*(3*i)-2*(fit_gamma_temp$loglik)
+  AIC_temp <- 2*(3*i-1)-2*(fit_gamma_temp$loglik)
+  BIC_temp <- log(n)*(3*i-1)-2*(fit_gamma_temp$loglik)
   
   #Store values in the vector
   AIC <-c(AIC,AIC_temp)
